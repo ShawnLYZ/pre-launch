@@ -19,7 +19,7 @@ Then ask your agent something like: *"Make sure nobody can hack my app before I 
 - [What it does](#what-it-does)
 - [Install](#install)
 - [Usage](#usage)
-- [The 27 checks](#the-27-checks)
+- [The Important checks](#the-important-checks)
 - [How it works](#how-it-works)
 - [What you get](#what-you-get)
 - [Helper scripts](#helper-scripts)
