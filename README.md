@@ -34,7 +34,7 @@ Then ask your agent something like: *"Make sure nobody can hack my app before I 
 
 ## What it does
 
-- **Covers all 27 checks:** authentication, hidden API keys, database rules, HTTPS, password hashing, server-side validation, XSS, logging, admin routes, parameterized queries, environment variables, rate limiting, CORS, security headers, session cookies, CSRF, password-reset expiry, file uploads, prices and payments, debug mode, vulnerable and unused dependencies, exposed files, secrets in Git history, key rotation, a full attacker-style review, and testing.
+- **Covers all important checks:** authentication, hidden API keys, database rules, HTTPS, password hashing, server-side validation, XSS, logging, admin routes, parameterized queries, environment variables, rate limiting, CORS, security headers, session cookies, CSRF, password-reset expiry, file uploads, prices and payments, debug mode, vulnerable and unused dependencies, exposed files, secrets in Git history, key rotation, a full attacker-style review, and testing.
 - **Fixes the riskiest things first.** The "priority eight" cause most stolen data, drained API credits and surprise bills in AI-built apps.
 - **Changes the code**, not just a list of advice. Every fix is small and aimed at the root cause.
 - **Proves each fix** with automated tests: a signed-out visitor, user A, user B and an admin, all trying to break in.
@@ -105,9 +105,11 @@ In Claude Code you can also call it directly with `/pre-launch`.
 
 **Short on time?** Say so, for example *"we launch in 2 days, just the essentials"*. The agent then does the map, the red flags and the priority eight, and tests and reports only those. Every other check is marked "Open: not yet reviewed", so the report never pretends to cover more than it did.
 
-**It's the wrong tool for** fixing one isolated bug, changing a single endpoint, or explaining a security concept. Just ask your agent normally for those.
+**Only need one thing?** Ask for it directly, for example *"add rate limiting"*, *"hash passwords properly"*, *"check git for leaked secrets"*, *"add security headers"* or *"turn off debug mode"*. The agent runs just the matching checks across the whole app: it audits them, fixes them, tests them and writes a short report. It still warns you right away if it finds a red flag outside that scope, such as a leaked key.
 
-## The 27 checks
+**It's the wrong tool for** fixing one specific known bug, or for explaining a security concept. Just ask your agent normally for those.
+
+## The Important Checks
 
 | # | Check | Severity |
 |---|---|---|

@@ -1,6 +1,6 @@
 ---
 name: pre-launch
-description: Secure a finished app before launch. Use this whenever someone has built (or vibe-coded with Lovable, Bolt, v0, Cursor, Replit or Claude Code) a web or mobile app or API and wants it safe before going live, deploying or getting real users, e.g. "make sure nobody can hack my app", "lock it down before I deploy", "is my app safe to launch?", "harden my API", "full security audit/pass/review of my repo", "launch checklist", "pre-launch", "I may have committed my .env", or worries about leaked API keys, Supabase/Firebase rules, Stripe payments or getting hacked. Runs 27 checks (auth, secrets, database/RLS, HTTPS, password hashing, validation, XSS, SQL injection, admin routes, rate limiting, CORS, headers, cookies, CSRF, reset links, uploads, payments, debug mode, dependencies, exposed files, Git-history secrets, key rotation), fixes issues, tests every fix, and writes SECURITY_REPORT.md. Not for a single isolated bug, a one-endpoint change or explaining a concept.
+description: Secure a finished app before launch. Use this whenever someone has built (or vibe-coded with Lovable, Bolt, v0, Cursor, Replit, Codex or Claude Code) a web or mobile app or API and wants it safe before going live, deploying or getting real users, e.g. "make sure nobody can hack my app", "lock it down before I deploy", "is my app safe to launch?", "harden my API", "full security audit/pass/review of my repo", "launch checklist", "pre-launch", "I may have committed my .env", or worries about leaked API keys, Supabase/Firebase rules, Stripe payments or getting hacked. Runs 27 checks (auth, secrets, database/RLS, HTTPS, password hashing, validation, XSS, SQL injection, admin routes, rate limiting, CORS, headers, cookies, CSRF, reset links, uploads, payments, debug mode, dependencies, exposed files, Git-history secrets, key rotation), fixes issues, tests every fix, and writes SECURITY_REPORT.md. Also use it for app-wide requests about just one or a few of these, e.g. "hide my API keys", "check my env variables", "protect my admin routes", "add proper authentication", "check user access", "sanitize my forms", "protect against XSS", "add rate limiting", "secure my API endpoints", "check my CORS settings", "add security headers", "turn off debug mode", "update my dependencies", "remove unused packages", "check for exposed files", "secure my database", "hash passwords properly", "check git for leaked secrets". Not for fixing one specific known bug in one line or endpoint, or explaining a concept.
 ---
 
 # Pre-Launch Security
@@ -60,6 +60,40 @@ These cause most stolen data, drained API credits and surprise bills in AI-built
 
 **Short on time?** If the person says they launch very soon or only want the essentials, do Phase 0, the red flags and the priority eight, then go straight to Phase 4: test those fixes and write the report with every other check listed as "Open: not yet reviewed". A partial pass that's honest about its coverage beats a rushed full one.
 
+### Targeted requests (one or a few checks)
+
+People often ask for one item instead of a whole pass ("add rate limiting", "check git for leaked secrets"). Running all 27 checks then wastes their time; doing the item carelessly misses the places it actually matters. So scope the work to the matching checks, but do them properly across the whole app:
+
+| They ask to... | Run checks |
+|---|---|
+| Hide API keys | 02 (+ 25 if a key was exposed) |
+| Check env variables | 11 (+ 02) |
+| Protect admin routes | 09 (+ 01) |
+| Add proper authentication | 01, 15 (+ 05, 17 if the app has its own passwords) |
+| Check user access / permissions | 03 (IDOR and ownership), 09 |
+| Sanitize forms / validate input | 06, 10 (+ 18 for upload forms) |
+| Protect against XSS | 07 (+ the CSP part of 14) |
+| Add rate limiting | 12 (+ B5 for paid or AI APIs) |
+| Secure API endpoints | 01, 03, 06, 12, 13 on every API route |
+| Check CORS settings | 13 |
+| Add security headers | 14 (+ HSTS from 04) |
+| Turn off debug mode | 20 |
+| Update dependencies | 21 |
+| Remove unused packages | 22 |
+| Check for exposed files | 23 |
+| Secure the database | 03, 10 |
+| Hash passwords properly | 05 |
+| Check git for leaked secrets | 24 (+ 25 for anything found) |
+| Full security audit | Everything: the normal workflow |
+
+How to run a targeted request:
+1. Do a **light Phase 0**: map only what those checks need (e.g. every API route for 12, every place a password is stored or compared for 05). Skip `SECURITY_MAP.md` unless the scope is wide (API endpoints, database). Still run the matching helper script.
+2. Still check the **red flags**. If you find one outside the scope, tell the person right away and offer to fix it. Don't silently widen the job, and don't stay quiet about a leaked key because they only asked about CORS.
+3. For each check in scope: read its section in the reference file, then audit → fix → test it as in Phases 2 and 4. All the ground rules still apply. Dependency updates (21) count as a change users would notice when a major version is involved.
+4. Write a short `SECURITY_REPORT.md` that has rows only for the checks in scope, plus one line: "Other checks not reviewed. Ask for a full pre-launch audit to cover them." Then give the normal chat summary.
+
+If the request names more than about six of these items, or says "everything", "all of it" or "full audit", use the full workflow instead.
+
 ### Phase 2: The rest of checks 01–25
 
 Work through the remaining checks. Each one: audit, fix, note how to verify. Read the reference file for the area before starting its checks. The files hold the detailed audit list, fix, verification, "done when" and stack-specific traps for each check:
@@ -88,7 +122,7 @@ A fix nobody has tested is a guess. For every check that applies, write real aut
 
 If the tests can't run (no dependencies installed, no network, no database), still write them, try a lighter verification (a test client, a quick script, static proof with file:line), and mark the evidence honestly as "written, not executed". Never claim a pass you didn't observe.
 
-Then write `SECURITY_REPORT.md` using the template in `references/report-template.md`, and finish with a short summary in chat. The report's "Checks" table always has **one row for every check 01–27** (plus the bonus checks that applied), even if you organised your work by finding. A findings list alone hides what was never looked at; the per-check table is how the person sees coverage, including what passed and what's N/A.
+Then write `SECURITY_REPORT.md` using the template in `references/report-template.md`, and finish with a short summary in chat. The report's "Checks" table always has **one row for every check 01–27** (plus the bonus checks that applied; for a targeted request, only the checks in scope), even if you organised your work by finding. A findings list alone hides what was never looked at; the per-check table is how the person sees coverage, including what passed and what's N/A.
 
 ## Helper scripts
 

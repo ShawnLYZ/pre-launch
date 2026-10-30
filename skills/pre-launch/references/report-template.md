@@ -1,6 +1,6 @@
 # SECURITY_REPORT.md template
 
-Use this structure for the final report. Fill every section; write "None" rather than dropping a section. The "Checks" table has exactly one row per check, 01 through 27 in order, including N/A and not-yet-reviewed ones. Don't merge checks into one row (e.g. "14/04") or replace the table with a findings list: the person reads this table to see coverage at a glance. Findings go in their own section below it.
+Use this structure for the final report. Fill every section; write "None" rather than dropping a section. The "Checks" table has exactly one row per check, 01 through 27 in order, including N/A and not-yet-reviewed ones. (Exception: for a targeted request, list only the checks in scope and add the line "Other checks not reviewed. Ask for a full pre-launch audit to cover them.") Don't merge checks into one row (e.g. "14/04") or replace the table with a findings list: the person reads this table to see coverage at a glance. Findings go in their own section below it.
 
 ```markdown
 # Security Report: <App name>
