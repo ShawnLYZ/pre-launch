@@ -1,0 +1,18 @@
+{
+  "name": "pre-launch",
+  "description": "Pre-launch security hardening skill for AI-built and hand-built apps.",
+  "owner": {
+    "name": "ShawnLYZ",
+    "url": "https://github.com/ShawnLYZ"
+  },
+  "plugins": [
+    {
+      "name": "pre-launch",
+      "source": "./",
+      "description": "Runs 27 security checks on a finished app, fixes issues, tests every fix and writes SECURITY_REPORT.md.",
+      "version": "1.0.0",
+      "license": "Apache-2.0",
+      "category": "security"
+    }
+  ]
+}

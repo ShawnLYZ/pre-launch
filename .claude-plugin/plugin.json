@@ -1,0 +1,15 @@
+{
+  "name": "pre-launch",
+  "displayName": "Pre-Launch Security",
+  "version": "1.0.0",
+  "description": "Secure a finished app before launch: runs 27 security checks (auth, secrets, database, HTTPS, XSS, SQL injection, CORS, headers, CSRF, payments, dependencies, Git-history secrets and more), fixes the issues, tests every fix and writes SECURITY_REPORT.md.",
+  "author": {
+    "name": "ShawnLYZ",
+    "url": "https://github.com/ShawnLYZ"
+  },
+  "homepage": "https://github.com/ShawnLYZ/pre-launch",
+  "repository": "https://github.com/ShawnLYZ/pre-launch",
+  "license": "Apache-2.0",
+  "keywords": ["security", "pre-launch", "audit", "hardening", "owasp", "vibe-coding", "checklist", "skill"],
+  "skills": "./skills/"
+}

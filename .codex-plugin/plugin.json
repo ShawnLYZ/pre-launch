@@ -1,0 +1,28 @@
+{
+  "name": "pre-launch",
+  "version": "1.0.0",
+  "description": "Secure a finished app before launch: runs 27 security checks (auth, secrets, database, HTTPS, XSS, SQL injection, CORS, headers, CSRF, payments, dependencies, Git-history secrets and more), fixes the issues, tests every fix and writes SECURITY_REPORT.md.",
+  "author": {
+    "name": "ShawnLYZ",
+    "url": "https://github.com/ShawnLYZ"
+  },
+  "homepage": "https://github.com/ShawnLYZ/pre-launch",
+  "repository": "https://github.com/ShawnLYZ/pre-launch",
+  "license": "Apache-2.0",
+  "keywords": ["security", "pre-launch", "audit", "hardening", "owasp", "vibe-coding", "checklist"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Pre-Launch Security",
+    "shortDescription": "Secure your app before launch",
+    "longDescription": "A senior-security-engineer workflow for finished apps. Maps the app, fixes the 'priority eight' first (API keys, env vars, Git history, key rotation, database rules, auth, admin routes, payments), works through all 27 checks, does a full attacker-style review, writes try-to-break-it tests and hands over SECURITY_REPORT.md with a manual-actions list.",
+    "developerName": "ShawnLYZ",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/ShawnLYZ/pre-launch",
+    "defaultPrompt": [
+      "Use pre-launch to make sure nobody can hack my app before I deploy it.",
+      "Run a pre-launch security pass on this repo and give me a report of findings and fixes.",
+      "I launch in 2 days and may have committed my .env. Do the essentials only."
+    ]
+  }
+}

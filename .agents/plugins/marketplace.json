@@ -1,0 +1,20 @@
+{
+  "name": "pre-launch",
+  "interface": {
+    "displayName": "Pre-Launch Security"
+  },
+  "plugins": [
+    {
+      "name": "pre-launch",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
