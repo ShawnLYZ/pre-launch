@@ -15,13 +15,27 @@ Contents: [03 Database](#03-secure-the-database) · [06 Validation](#06-validate
    - **Firebase:** per-path rules on `request.auth.uid` that validate written fields. Remove `allow read, write: if true` and date-based "test mode" rules.
    - **Storage buckets:** private by default, policies so users access only their own files.
 4. Server-side access: every query that fetches/updates/deletes by ID also checks ownership. List endpoints where an ID comes from the client and the query isn't scoped to the current user (`WHERE id = ?` must become `WHERE id = ? AND user_id = ?`).
-5. `service_role`/admin key and DB connection string used ONLY in server code.
+5. **Public DB key in the browser, secret key on the server only.** The browser may hold only the key designed to be public: Supabase `anon` / `sb_publishable_...`, the Firebase web config, Appwrite project ID, a PocketBase URL. The Supabase `service_role` / `sb_secret_...` key, Firebase Admin service-account JSON, Appwrite API keys, MongoDB/Postgres/MySQL connection strings, Neon/Turso/PlanetScale tokens and Prisma/Drizzle `DATABASE_URL` must exist ONLY in server code and server env vars. Search client code, public-prefixed env vars (`NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` is a classic) and the production bundle (02). Also flag the reverse mistake: the browser using a secret key "because the anon key got permission errors"; that means the RLS policies are wrong, and the fix is the policy, not a stronger key. A public key is only safe when 3a/3b below are done, because anyone can copy it and query the DB directly.
 6. DB user isn't a superuser; DB not open to the internet (no `0.0.0.0/0`); TLS on connections; automated backups on.
 7. Responses never include sensitive columns (password hashes, tokens, other users' emails, internal flags). Select only fields the UI needs; avoid `SELECT *` / returning whole ORM objects.
 
+8. **Field tampering** (users changing fields they shouldn't, even on their own rows): can a user set their own `role`, `is_admin`, `plan`, `credits`, `balance`, `is_verified`, `owner_id`, `team_id`, `price` or `status`? Check every write path: server handlers (mass assignment, see 06), RLS `UPDATE` policies (a policy of `auth.uid() = user_id` lets the owner change *any* column on their row, including `role`), Firebase rules that check ownership but not which fields changed, GraphQL mutations, admin-only fields on shared forms.
+
 **Fix:** write the missing policies/rules and ownership checks. Show every policy in full SQL/rules syntax with a one-line plain-English explanation. Return 404 (not 403) for other users' resources if you don't want to reveal existence.
 
-**Verify:** a test or script with two users proving A can't read, update or delete B's rows or files, and a signed-out visitor with only the public key gets nothing private.
+- **Lock record access on the server:** scope every query by the current user from the verified session (01): `WHERE id = $1 AND user_id = $2`, Prisma `where: { id, userId: session.user.id }`, Django `get_object_or_404(Note, pk=pk, owner=request.user)`. For teams, check membership (`team_id IN (teams the user belongs to)`), not just that the row exists. Prefer one helper (`getOwnedOrThrow(model, id, user)`) over copy-pasted checks. Use random IDs (UUID) for new tables; it doesn't replace checks but stops trivial enumeration.
+- **Enable RLS (Supabase/Postgres)** with this starting pattern for an owner-only table, then adapt:
+  ```sql
+  alter table public.notes enable row level security;
+  create policy "notes: owner can read"   on public.notes for select using ((select auth.uid()) = user_id);
+  create policy "notes: owner can insert" on public.notes for insert with check ((select auth.uid()) = user_id);
+  create policy "notes: owner can update" on public.notes for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+  create policy "notes: owner can delete" on public.notes for delete using ((select auth.uid()) = user_id);
+  ```
+  Add `to authenticated` where signed-out access isn't needed. Run a final query that lists every table in exposed schemas with RLS off: `select schemaname, tablename from pg_tables where schemaname = 'public' and not rowsecurity;` (should return nothing). Remind the person to re-run it, or the Supabase Security Advisor, after adding tables.
+- **Block field tampering** at every layer: (a) server: copy only allowlisted fields into writes (06); (b) Postgres: protect privileged columns with column privileges (`revoke update on public.profiles from authenticated; grant update (display_name, avatar_url) on public.profiles to authenticated;`), or a `BEFORE UPDATE` trigger that raises if `new.role <> old.role` unless the caller is an admin/service role, or move privileged fields to a separate table users can't write; (c) Firebase: compare changed keys, e.g. `request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName','photoURL'])`, and on create validate `request.resource.data.keys().hasOnly([...])` and `request.resource.data.ownerId == request.auth.uid`.
+
+**Verify:** a test or script with two users proving A can't read, update or delete B's rows or files, and a signed-out visitor with only the public key gets nothing private. Field tampering: user A updating their own row with `role: "admin"`, `credits: 999999` or `user_id: <B's id>` is rejected or ignored. Public key: the production bundle contains only the public DB key.
 
 **Watch out:** RLS enabled with no policies blocks everything; disabled allows everything. MongoDB Atlas open to `0.0.0.0/0` with a weak password is a common breach.
 
@@ -33,10 +47,11 @@ Contents: [03 Database](#03-secure-the-database) · [06 Validation](#06-validate
 **Audit**
 1. Every endpoint, server action, form handler, webhook and job that accepts outside input (body, query, URL params, headers, cookies, file metadata). Table with the fields each accepts.
 2. Validated on the server today? How?
-3. **Mass assignment:** the body (or a spread: `{...req.body}`, `**data`, `Object.assign(user, req.body)`, `Model.create(req.body)`, `update(request.json)`) passed straight into a DB write. Flag server-controlled fields: `id`, `user_id`/`owner_id`, `role`, `is_admin`, `price`, `amount`, `status`, `credits`, `balance`, `plan`, `is_verified`, `email_verified`, `created_at`.
+3. **Mass assignment / field tampering:** the body (or a spread: `{...req.body}`, `**data`, `Object.assign(user, req.body)`, `Model.create(req.body)`, `update(request.json)`) passed straight into a DB write. Flag server-controlled fields: `id`, `user_id`/`owner_id`, `role`, `is_admin`, `price`, `amount`, `status`, `credits`, `balance`, `plan`, `is_verified`, `email_verified`, `created_at`. If the browser writes to the DB directly, the same fields must be locked in RLS/rules (03 step 8).
+4. **Every input source counts**, not just form bodies: URL params, query strings, headers your code reads (`X-User-Id`, `X-Forwarded-*`), cookies, uploaded file names and metadata, webhook payloads (after signature check), CSV/JSON imports, data from third-party APIs, and AI/LLM output that is fed back into code.
 
 **Fix**
-- ONE validation library fitting the stack (Zod/Valibot for TS, Pydantic/Marshmallow for Python, Joi or express-validator if already present) at the very start of every handler.
+- Validate **all** input, on every handler: ONE validation library fitting the stack (Zod/Valibot for TS, Pydantic/Marshmallow for Python, Joi or express-validator if already present) at the very start of every handler.
 - Per field: type, required/optional, number min/max, **max length on every string**, enums where possible, formats (email, URL, UUID, date), money as integers in minor units.
 - Reject unknown fields (strict mode); copy only allowed fields into writes. Server-controlled fields never come from client input.
 - Normalise (trim, lowercase emails).
@@ -62,7 +77,7 @@ Contents: [03 Database](#03-secure-the-database) · [06 Validation](#06-validate
 4. Markdown/rich text (raw HTML allowed?), rich-text editors, SVG uploads, HTML emails/PDFs with user content.
 5. AI/LLM output is untrusted input too; sanitise if rendered as HTML/Markdown.
 
-**Fix:** prefer the framework's escaped rendering (`{value}` in JSX, `{{ }}`, `textContent`). Where HTML is genuinely needed, sanitise with DOMPurify (browser) or a maintained server sanitiser (sanitize-html, bleach/nh3) with a strict allowlist. Validate URL schemes. HttpOnly cookies (15) and CSP (14) as second lines of defence.
+**Fix:** escape user content for the context it lands in, every time it's output: HTML body (the framework's default escaping: `{value}` in JSX, `{{ }}`, `textContent`), HTML attributes (quoted, escaped), URLs (`encodeURIComponent` plus the scheme check below), JavaScript/JSON inside a page (`JSON.stringify` and escape `<` as `\u003c`), CSS (avoid user values), email headers and subjects (strip CR/LF), CSV exports (formula prefix, see 18), and Markdown (render with raw HTML disabled). Prefer the framework's escaped rendering. Where HTML is genuinely needed, sanitise with DOMPurify (browser) or a maintained server sanitiser (sanitize-html, bleach/nh3) with a strict allowlist. Validate URL schemes. HttpOnly cookies (15) and CSP (14) as second lines of defence.
 
 **Verify:** tests submitting `<img src=x onerror=alert(1)>`, `"><svg onload=alert(1)>`, `javascript:alert(1)` through each affected input and asserting they render as harmless text.
 

@@ -75,6 +75,30 @@ RULES = [
     ("17", "Link built from Host header", r"req\.(?:headers\.host|get\(['\"]host['\"]\))|request\.host(?:_url)?\b|request\.headers\[['\"]Host", ANY),
     # 04 HTTPS
     ("04", "Hard-coded http:// URL (non-localhost)", r"['\"`]http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0|www\.w3\.org)[^'\"`\s]+", ANY),
+    # 03 / 06 Field tampering (mass assignment)
+    ("06", "Request body spread/passed straight into a write (field tampering)",
+     r"\.\.\.\s*req\.body|Object\.assign\(\s*\w+\s*,\s*req\.body|\.(?:create|update|insert|upsert|updateOne|findByIdAndUpdate|findOneAndUpdate|save)\(\s*(?:\{\s*data\s*:\s*)?req\.body\b|\*\*\s*(?:request\.(?:json|form|get_json\(\))|data|payload|body)\b|\.update\(\s*request\.(?:json|form)", ANY),
+    ("03", "Supabase/Firebase privileged key name (must be server-only)",
+     r"(?i)service_role|SUPABASE_SECRET|sb_secret_|SERVICE_ACCOUNT|firebase-admin|FIREBASE_PRIVATE_KEY", JS),
+    ("03", "Table created without RLS? (check every table has ENABLE ROW LEVEL SECURITY)",
+     r"(?i)create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?\w+", {".sql"}),
+    ("03", "RLS disabled / permissive rule", r"(?i)disable\s+row\s+level\s+security|using\s*\(\s*true\s*\)|allow\s+read\s*,\s*write\s*:\s*if\s+true|allow\s+(?:read|write)\s*:\s*if\s+request\.time", ANY),
+    # 28 Encrypt sensitive data
+    ("28", "Sensitive field name (check it's encrypted at field level)",
+     r"(?i)\b(?:ssn|social_?security|national_?id|passport(?:_?(?:no|number))?|tax_?id|tin_number|iban|account_?number|routing_?number|card_?number|cvv|cvc|date_?of_?birth|\bdob\b|diagnosis|medical|health_?record|totp_?secret|mfa_?secret|refresh_?token|access_?token)\b\s*[:=(]|\b(?:ssn|card_number|account_number|date_of_birth|diagnosis|totp_secret)\s+(?:text|varchar|string|char)", ANY),
+    ("28", "Weak or broken encryption", r"createCipher\(|aes-\d+-ecb|AES\.MODE_ECB|DES\.new\(|des-ede|\bRC4\b|createCipheriv\(\s*['\"]aes-\d+-cbc|Buffer\.alloc\(\s*16\s*(?:,\s*0)?\s*\)|iv\s*=\s*b?['\"]0+", ANY),
+    ("28", "Base64 used as if it were encryption? (check)", r"(?i)(?:encrypt|cipher|secure)\w*\s*[=:(][^\n]*(?:btoa\(|b64encode\(|toString\(['\"]base64)", ANY),
+    # 29 Trim API responses
+    ("29", "Whole object/row returned to client (check fields are allowlisted)",
+     r"res\.(?:status\(\d+\)\.)?(?:json|send)\(\s*(?:user|users|account|profile|row|rows|result|results|doc|docs|record|records|data)\s*\)|return\s+(?:jsonify|JsonResponse|Response)\(\s*\w+\.__dict__|jsonify\(\s*(?:user|users|row|rows|result)\s*\)|model_to_dict\(|fields\s*=\s*['\"]__all__['\"]", ANY),
+    ("29", "SELECT * / select('*') (check no private columns reach the client)", r"(?i)select\s+\*\s+from|\.select\(\s*['\"]\*['\"]\s*\)", ANY),
+    ("29", "Relation included wholesale (check the related object's fields)", r"include\s*:\s*\{\s*\w+\s*:\s*true|\.populate\(\s*['\"]\w+['\"]\s*\)|depth\s*=\s*\d", ANY),
+    ("29", "Client-controlled limit/page size (check server max)", r"(?:req\.query|request\.args|searchParams\.get\()\s*(?:\.|\[['\"]|\(['\"])\s*(?:limit|per_?page|page_?size|take|count)", ANY),
+    # 30 Bot protection
+    ("30", "Public sign-up/contact/reset handler (check bot protection, verified server-side)",
+     r"(?i)(?:\.post\(|@\w+\.(?:post|route)\(|path\(|route\()\s*['\"][^'\"]*(?:sign-?up|register|contact|feedback|waitlist|newsletter|forgot|reset-password|magic-link|send-?(?:otp|sms|code)|invite|comment)", ANY),
+    ("30", "CAPTCHA widget/verify call (confirm token is checked on the server)",
+     r"(?i)turnstile|hcaptcha|recaptcha|siteverify|friendlycaptcha|app_?check|botid", ANY),
     # B2 SSRF
     ("B2", "Server fetch of possibly user-supplied URL", r"(?:fetch|axios\.get|requests\.get|urllib\.request\.urlopen|httpx\.get)\(\s*(?:req\.|request\.|url\b|body\.)", ANY),
     # B1 AI
@@ -137,7 +161,8 @@ def main():
         if len(matches) > 25:
             print(f"   ... {len(matches) - 25} more")
     print("\nThese are leads. Confirm each by reading the code; then audit what no regex can see:"
-          " auth on every handler (01), ownership checks/IDOR (03), admin role checks (09), webhook flow (19).")
+          " auth on every handler (01), ownership checks/IDOR (03), admin role checks (09), webhook flow (19),"
+          " which response fields the UI really needs (29), whether a CAPTCHA token is verified server-side (30).")
 
 
 if __name__ == "__main__":

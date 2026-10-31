@@ -47,6 +47,8 @@ Contents: [20 Debug mode](#20-disable-production-debug-mode) · [21 Vulnerable d
 - Never run `npm audit fix --force` blindly.
 - Rebuild and run tests after each group of upgrades.
 - Set up Dependabot or Renovate (grouped updates) and GitHub security alerts.
+- **Keep scanning automatically:** add a CI job that fails on new High/Critical production vulnerabilities, e.g. a GitHub Actions step running `npm audit --omit=dev --audit-level=high` (or `pnpm audit --prod --audit-level high`, `pip-audit -r requirements.txt`, `osv-scanner scan -r .`) on every push and on a weekly schedule. Show the workflow file. Enable Dependabot alerts and the dependency review action on pull requests if the repo is on GitHub, and the equivalent on GitLab/Bitbucket.
+- Scan the container image too if the app ships one (`docker scout cves`, `trivy image`), since the base image has its own outdated packages.
 
 **Report:** what was upgraded, what remains (with reasons: "no fix available", "dev-only, not shipped"), anything suspicious.
 

@@ -65,7 +65,36 @@ Throughout: never print a secret value. Mask to the first 4 characters. Keep one
 1. FIRST: everything found goes on the rotation list (25). Rewriting history does NOT make a leaked key safe; forks, clones and caches keep copies.
 2. Remove secrets still in current code; load from env vars.
 3. Prevention: a pre-commit hook running gitleaks (or the pre-commit framework with a secrets hook), a CI step scanning each push, and the steps to enable GitHub Secret scanning + Push protection (Settings → Code security).
-4. Only AFTER rotation, and only if the person wants it: explain purging with `git filter-repo`, the impact (rewritten hashes, force-push, every collaborator re-clones) and asking GitHub to clear cached views for public repos. Don't run it yourself without explicit approval; it's destructive.
+4. **Purge the history** (only AFTER the keys are rotated, and only with the person's explicit go-ahead for this step: it rewrites every commit hash and needs a force-push). Follow the runbook below.
+
+### Purging secrets from Git history
+
+Why bother if the keys are rotated? Because a purged history stops the next person who clones or forks the repo from finding old (and sometimes still-valid) credentials, and many secrets can't be rotated easily: personal data in a committed DB dump, a customer CSV, a private key used to sign old releases. Tell the person plainly: purging is clean-up, rotation is the fix.
+
+**Before you start, tell the person what will happen and get a yes:**
+- Every commit hash changes from the first affected commit onward. Open pull requests, links to commits and signed commits break.
+- It needs `git push --force` to every branch and tag on the remote. Branch protection may have to be relaxed temporarily (they do this in the GitHub/GitLab settings).
+- Every collaborator must re-clone (or hard-reset to the new history). Anyone who pushes an old clone puts the secret right back.
+- Forks, existing clones, CI caches, and third-party mirrors keep the old history. GitHub also keeps cached views of old commits and pull-request refs until GitHub Support removes them.
+
+**Steps.** Steps 3-8 happen in a separate mirror clone, so you can always do them: the person's own repo stays untouched and nothing is lost if they say no. Rewriting their working repo in place, or pushing, needs their yes. Without it, stop after step 8, hand over the cleaned mirror and the exact commands for steps 9-11, and list the decision under "Needs your decision". Running `filter-repo` directly in their working copy also throws away context they may need: unpushed branches, stashes and reflog history.
+1. **Rotate first** (25). Confirm each old key now fails.
+2. **Coordinate:** ask collaborators to push or save their work and pause pushes; note open PRs.
+3. **Backup:** `git clone --mirror <remote-url> ../<repo>-backup-before-purge.git`. Keep it somewhere private, then delete it once everyone is on the new history; it contains the secrets.
+4. **Work on a fresh mirror clone,** not the working copy: `git clone --mirror <remote-url> ../<repo>-purge.git && cd ../<repo>-purge.git`.
+5. **Install `git-filter-repo`** (the tool Git itself recommends; `pip install git-filter-repo` or the OS package). Confirm it's the real package before installing (ground rules). Install it into the user's tool environment, never into the project folder (no downloaded wheels or vendored copies left in the repo). If it can't be installed, say so and give the commands rather than falling back to a hand-rolled rewrite. BFG Repo-Cleaner (`bfg --delete-files .env`, `bfg --replace-text`) is an acceptable Java alternative. Don't use `git filter-branch`: it's slow and easy to get wrong.
+6. **Remove whole files** that should never have been committed:
+   `git filter-repo --invert-paths --path .env --path .env.local --path config/service-account.json --path-glob '*.pem'`
+7. **Replace secret values** that live inside files you want to keep: generate a replacements file OUTSIDE the repo with `python <skill-dir>/scripts/scan_secrets.py <repo> --history --write-replacements ../replacements.txt`. It writes each found value as `value==>REDACTED` without printing any value. Review it (open it yourself, and don't paste it into chat), delete false positives, add any value the scanner missed, then run `git filter-repo --replace-text ../replacements.txt`. Delete `replacements.txt` straight afterwards; it holds the secrets.
+8. **Check the result before pushing:** `python <skill-dir>/scripts/scan_secrets.py . --history` (or gitleaks) on the purged mirror finds nothing; `git log --all --full-history -- .env` is empty.
+9. **Push:** `git push --force --mirror` (or `git push --force --all && git push --force --tags`). `filter-repo` removes the `origin` remote on purpose; add it back first.
+10. **Clean up remotely:** for GitHub, contact GitHub Support to remove cached views and PR refs (`refs/pull/*`, which a normal push can't rewrite); ask forks' owners to delete them; clear CI caches; re-enable branch protection.
+11. **Everyone re-clones.**
+12. **Prevent a repeat.** Always include this step, even when the purge itself is handed over: add a gitleaks pre-commit hook (or the pre-commit framework with a secrets hook) to the project, a CI job that scans every push, `.env*` in `.gitignore` with a committed `.env.example`, and the click-path to turn on GitHub Secret scanning + Push protection (Settings → Code security).
+
+If the repo is private, small and has a single owner, a simpler alternative is acceptable: create a fresh repo from the current, cleaned working tree (no history), archive the old one privately, then delete it once you're sure. Mention it as an option; let the person choose.
+
+**Verify:** after a purge, a fresh clone of the remote scanned with `scan_secrets.py --history` (or gitleaks) shows none of the purged values or files.
 
 **Watch out:** private repos aren't safe storage. They get shared, forked, cloned onto laptops and connected to third-party tools.
 

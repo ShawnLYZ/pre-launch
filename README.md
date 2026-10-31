@@ -19,7 +19,8 @@ Then ask your agent something like: *"Make sure nobody can hack my app before I 
 - [What it does](#what-it-does)
 - [Install](#install)
 - [Usage](#usage)
-- [The Important checks](#the-important-checks)
+- [Quick actions](#quick-actions)
+- [The important checks](#the-important-checks)
 - [How it works](#how-it-works)
 - [What you get](#what-you-get)
 - [Helper scripts](#helper-scripts)
@@ -34,7 +35,7 @@ Then ask your agent something like: *"Make sure nobody can hack my app before I 
 
 ## What it does
 
-- **Covers all important checks:** authentication, hidden API keys, database rules, HTTPS, password hashing, server-side validation, XSS, logging, admin routes, parameterized queries, environment variables, rate limiting, CORS, security headers, session cookies, CSRF, password-reset expiry, file uploads, prices and payments, debug mode, vulnerable and unused dependencies, exposed files, secrets in Git history, key rotation, a full attacker-style review, and testing.
+- **Covers all important checks:** authentication, hidden API keys, database rules, HTTPS, password hashing, server-side validation, XSS, logging, admin routes, parameterized queries, environment variables, rate limiting, CORS, security headers, session cookies, CSRF, password-reset expiry, file uploads, prices and payments, debug mode, vulnerable and unused dependencies, exposed files, secrets in Git history (and purging them), key rotation, encrypting sensitive data, trimming API responses, bot protection, a full attacker-style review, and testing.
 - **Fixes the riskiest things first.** The "priority eight" cause most stolen data, drained API credits and surprise bills in AI-built apps.
 - **Changes the code**, not just a list of advice. Every fix is small and aimed at the root cause.
 - **Proves each fix** with automated tests: a signed-out visitor, user A, user B and an admin, all trying to break in.
@@ -107,6 +108,35 @@ In Claude Code you can also call it directly with `/pre-launch`.
 
 **Only need one thing?** Ask for it directly, for example *"add rate limiting"*, *"hash passwords properly"*, *"check git for leaked secrets"*, *"add security headers"* or *"turn off debug mode"*. The agent runs just the matching checks across the whole app: it audits them, fixes them, tests them and writes a short report. It still warns you right away if it finds a red flag outside that scope, such as a leaked key.
 
+## Quick actions
+
+Ask for any of these by name (or in your own words) and the agent runs just the matching checks across your whole app, fixes them, tests them and writes a short report:
+
+| Ask for | What you get | Checks |
+|---|---|---|
+| Hide API keys | No secret in front-end code; secret calls moved to the server | 02, 25 |
+| Purge Git secrets | Keys rotated first, then a backed-up, approval-gated history rewrite with `git filter-repo`, re-scanned clean | 24, 25 |
+| Use public DB key | The browser holds only the anon/publishable key; `service_role` and connection strings stay on the server | 03, 02 |
+| Enable row-level security | RLS on every table with per-action policies (or Firebase rules), no table left open | 03 |
+| Encrypt sensitive data | SSNs, health and bank data, user tokens stored as AES-GCM ciphertext with a server-only key | 28 |
+| Enforce server-side auth | Every protected handler checks the session itself | 01 |
+| Lock record access | Users can only reach their own records (no IDOR) | 03 |
+| Block field tampering | Users can't set their own `role`, credits, owner or price | 06, 03 |
+| Secure session cookies | HttpOnly, Secure, SameSite; sessions rotated and revoked properly | 15 |
+| Hash passwords | Argon2id or bcrypt, with migration from weak hashes | 05 |
+| Rate limit login | Per-IP and per-account limits with backoff on every login path | 12 |
+| Add bot protection | CAPTCHA (e.g. Turnstile) verified on the server for sign-up, reset and contact forms | 30 |
+| Parameterize queries | No SQL/NoSQL built from strings | 10 |
+| Validate all input | One schema validator on every handler and input source | 06 |
+| Escape user content | User text always rendered as text, escaped for its context | 07 |
+| Restrict file uploads | Type, size, name, storage and serving locked down | 18 |
+| Trim API responses | Each endpoint returns only the fields its viewer needs; lists paginated | 29 |
+| Add security headers | CSP, nosniff, frame, referrer and permissions headers | 14 |
+| Force HTTPS | Redirects, HSTS, no mixed content | 04 |
+| Scan dependencies | Audit, fixes, real-package check and CI scanning on every push | 21 |
+
+Destructive steps (rewriting Git history, encrypting live data) always wait for your yes.
+
 **It's the wrong tool for** fixing one specific known bug, or for explaining a security concept. Just ask your agent normally for those.
 
 ## The Important Checks
@@ -140,6 +170,9 @@ In Claude Code you can also call it directly with `/pre-launch`.
 | 25 | Revoke and replace compromised keys | Critical |
 | 26 | Thorough security review (business logic, multi-tenant, SSRF...) | Review |
 | 27 | Test the protections and report | Verify |
+| 28 | Encrypt sensitive data (field-level, AES-GCM, server-only key) | High |
+| 29 | Trim API responses (field allowlists, pagination) | High |
+| 30 | Add bot protection (server-verified CAPTCHA, honeypots) | Medium |
 
 **Bonus checks**, applied when your app has the matching feature:
 
@@ -160,7 +193,7 @@ Phase 0  Map         Read the code, write SECURITY_MAP.md, run the scanners,
                      flag red flags, report the top 5 concerns. Nothing is changed yet.
 Phase 1  Priority 8  02 API keys → 11 Env vars → 24 Git history → 25 Rotate keys
                      → 03 Database → 01 Auth → 09 Admin routes → 19 Payments
-Phase 2  The rest    All remaining checks 01–25: audit → fix → note how to verify
+Phase 2  The rest    All remaining checks 01–25 and 28–30: audit → fix → note how to verify
 Phase 3  Review      Attacker-style pass for what checklists miss → SECURITY_REVIEW.md
 Phase 4  Test        Try-to-break-it tests, run until green → SECURITY_REPORT.md
 ```
@@ -188,7 +221,7 @@ The agent leaves these files in your project:
 |---|---|
 | `SECURITY_MAP.md` | Your stack, data, auth, every entry point, third-party services, environment variable names (never values) and risky features |
 | `SECURITY_REVIEW.md` | The attacker-style review: business logic, tenant isolation, SSRF, open redirects, prompt injection |
-| `SECURITY_REPORT.md` | Summary counts, one row for each check 01–27 with status and evidence, findings with file:line and proof, open items, your manual-actions checklist, and how to run the tests |
+| `SECURITY_REPORT.md` | Summary counts, one row for each check 01–30 with status and evidence, findings with file:line and proof, open items, your manual-actions checklist, and how to run the tests |
 | Security tests | Automated "try to break it" tests in your existing test framework, or a minimal setup if you have none (Jest or Vitest with supertest, pytest...) |
 | Code fixes | Small, reviewable changes, preferably one shared helper per concern (`requireUser()`, `requireAdmin()`, one validator, one `logSecurityEvent()`) |
 
@@ -210,13 +243,16 @@ python skills/pre-launch/scripts/scan_code.py ./my-app
 # Secret-looking strings (masked) in the working tree, full Git history and a build folder
 python skills/pre-launch/scripts/scan_secrets.py ./my-app --history --build ./my-app/dist
 
+# Build a git filter-repo replacements file for purging (written outside the repo, values never printed)
+python skills/pre-launch/scripts/scan_secrets.py ./my-app --history --write-replacements ../replacements.txt
+
 # Read-only probe of YOUR OWN deployed site: HTTPS redirect, headers, CORS, ~35 exposed paths
 python skills/pre-launch/scripts/check_live.py https://your-domain.com --api-path /api/health
 ```
 
 | Script | Checks it supports |
 |---|---|
-| `scan_code.py` | 02, 05, 07, 10, 11, 13, 19, 20 |
+| `scan_code.py` | 02, 03, 05, 06, 07, 10, 11, 13, 19, 20, 28, 29, 30 |
 | `scan_secrets.py` | 02, 11, 24, 25 |
 | `check_live.py` | 04, 13, 14, 20, 23 |
 
@@ -258,7 +294,8 @@ In a trigger test, the skill started for 10 out of 10 prompts asking for a whole
 │       │   ├── identity-access.md          # 01, 05, 09, 15, 17
 │       │   ├── secrets-keys.md             # 02, 11, 24, 25
 │       │   ├── data-inputs.md              # 03, 06, 07, 10, 18, 19
-│       │   ├── network-browser.md          # 04, 12, 13, 14, 16
+│       │   ├── data-protection.md          # 28, 29
+│       │   ├── network-browser.md          # 04, 12, 13, 14, 16, 30
 │       │   ├── deployment-supply-chain.md  # 20, 21, 22, 23
 │       │   ├── monitoring-review-testing.md# 08, 26, 27 + test list
 │       │   ├── bonus-checks.md             # B1–B7, incident response

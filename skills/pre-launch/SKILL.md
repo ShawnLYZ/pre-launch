@@ -1,6 +1,6 @@
 ---
 name: pre-launch
-description: Secure a finished app before launch. Use this whenever someone has built (or vibe-coded with Lovable, Bolt, v0, Cursor, Replit, Codex or Claude Code) a web or mobile app or API and wants it safe before going live, deploying or getting real users, e.g. "make sure nobody can hack my app", "lock it down before I deploy", "is my app safe to launch?", "harden my API", "full security audit/pass/review of my repo", "launch checklist", "pre-launch", "I may have committed my .env", or worries about leaked API keys, Supabase/Firebase rules, Stripe payments or getting hacked. Runs 27 checks (auth, secrets, database/RLS, HTTPS, password hashing, validation, XSS, SQL injection, admin routes, rate limiting, CORS, headers, cookies, CSRF, reset links, uploads, payments, debug mode, dependencies, exposed files, Git-history secrets, key rotation), fixes issues, tests every fix, and writes SECURITY_REPORT.md. Also use it for app-wide requests about just one or a few of these, e.g. "hide my API keys", "check my env variables", "protect my admin routes", "add proper authentication", "check user access", "sanitize my forms", "protect against XSS", "add rate limiting", "secure my API endpoints", "check my CORS settings", "add security headers", "turn off debug mode", "update my dependencies", "remove unused packages", "check for exposed files", "secure my database", "hash passwords properly", "check git for leaked secrets". Not for fixing one specific known bug in one line or endpoint, or explaining a concept.
+description: Secure a finished app before launch. Use this whenever someone has built (or vibe-coded with Lovable, Bolt, v0, Cursor, Replit, Codex or Claude Code) a web or mobile app or API and wants it safe before going live, deploying or getting real users, e.g. "make sure nobody can hack my app", "lock it down before I deploy", "is my app safe to launch?", "harden my API", "full security audit/pass/review of my repo", "launch checklist", "pre-launch", "I may have committed my .env", or worries about leaked API keys, Supabase/Firebase rules, Stripe payments or getting hacked. Runs 30 checks (auth, secrets, database/RLS, HTTPS, password hashing, validation, XSS, SQL injection, admin routes, rate limiting, CORS, headers, cookies, CSRF, reset links, uploads, payments, debug mode, dependencies, exposed files, Git-history secrets, key rotation, field encryption, API response trimming, bot protection), fixes issues, tests every fix, and writes SECURITY_REPORT.md. Also use it for app-wide requests about just one or a few of these, e.g. "hide my API keys", "purge secrets from git history", "use the public/anon DB key", "enable row-level security", "encrypt sensitive data", "enforce server-side auth", "lock record access", "stop users editing their role", "secure session cookies", "hash passwords", "rate limit login", "add a CAPTCHA / bot protection", "parameterize queries", "validate all input", "escape user content", "restrict file uploads", "trim API responses", "add security headers", "force HTTPS", "scan dependencies". Not for fixing one specific known bug in one line or endpoint, or explaining a concept.
 ---
 
 # Pre-Launch Security
@@ -62,39 +62,61 @@ These cause most stolen data, drained API credits and surprise bills in AI-built
 
 ### Targeted requests (one or a few checks)
 
-People often ask for one item instead of a whole pass ("add rate limiting", "check git for leaked secrets"). Running all 27 checks then wastes their time; doing the item carelessly misses the places it actually matters. So scope the work to the matching checks, but do them properly across the whole app:
+People often ask for one item instead of a whole pass ("add rate limiting", "check git for leaked secrets"). Running all 30 checks then wastes their time; doing the item carelessly misses the places it actually matters. So scope the work to the matching checks, but do them properly across the whole app.
+
+**Quick actions.** These are the 20 things people most often ask for by name. Match the request to a row even when the wording differs ("stop people changing their role" = Block field tampering; "add a CAPTCHA" = Add bot protection; "don't leak the hash in /me" = Trim API responses):
+
+| Quick action | Run checks | What "done" means |
+|---|---|---|
+| Hide API keys | 02 (+ 25 if a key was exposed) | No secret in the client bundle; secret calls go through the server |
+| Purge Git secrets | 24 incl. the purge runbook, 25 first | Keys rotated, then history rewritten with approval, re-scan clean |
+| Use public DB key | 03 step 5, 02 | Browser holds only the anon/publishable key; secret key server-only; RLS makes that safe |
+| Enable row-level security | 03 (RLS / security rules) | RLS on every exposed table with per-action policies; no table left open |
+| Encrypt sensitive data | 28 (+ 08 for log redaction) | Sensitive fields stored as authenticated ciphertext; key server-only |
+| Enforce server-side auth | 01 (+ 09) | Every protected handler checks the session itself; 401 otherwise |
+| Lock record access | 03 (IDOR, ownership) | Every by-ID query scoped to the current user/team; A can't touch B's rows |
+| Block field tampering | 06 mass assignment, 03 step 8 | Users can't set role, credits, owner, price, status, even on their own rows |
+| Secure session cookies | 15 (+ 04 Secure flag) | HttpOnly, Secure, SameSite; rotated on login, killed on logout |
+| Hash passwords | 05 | Argon2id/bcrypt; weak hashes migrated; no passwords in logs |
+| Rate limit login | 12 (login rows + step 4a), 30 step 3 | Per-IP and per-account limits on every login path; 429 + backoff |
+| Add bot protection | 30 (+ 12) | Challenge verified server-side on sign-up, reset, contact, and on login after failures |
+| Parameterize queries | 10 | No query built from strings; identifiers allowlisted |
+| Validate all input | 06 (+ 10, 18 for upload forms) | Schema validation on every handler and every input source; unknown fields rejected |
+| Escape user content | 07 (+ the CSP part of 14) | User text renders as text everywhere; HTML sanitised only where needed |
+| Restrict file uploads | 18 | Type by content, size, random names, private storage, safe serving |
+| Trim API responses | 29 (+ 20 for error bodies) | Each endpoint returns only allowlisted fields for its audience; lists paginated |
+| Add security headers | 14 (+ HSTS from 04) | CSP, nosniff, frame, referrer, permissions headers on every route |
+| Force HTTPS | 04 (+ 15 Secure cookies) | HTTP → HTTPS redirect, HSTS, no mixed content, TLS to services |
+| Scan dependencies | 21 (+ 22) | Audit run, Critical/High fixed, packages confirmed real, CI scanning set up |
+
+Other common requests:
 
 | They ask to... | Run checks |
 |---|---|
-| Hide API keys | 02 (+ 25 if a key was exposed) |
 | Check env variables | 11 (+ 02) |
 | Protect admin routes | 09 (+ 01) |
 | Add proper authentication | 01, 15 (+ 05, 17 if the app has its own passwords) |
-| Check user access / permissions | 03 (IDOR and ownership), 09 |
-| Sanitize forms / validate input | 06, 10 (+ 18 for upload forms) |
-| Protect against XSS | 07 (+ the CSP part of 14) |
-| Add rate limiting | 12 (+ B5 for paid or AI APIs) |
-| Secure API endpoints | 01, 03, 06, 12, 13 on every API route |
+| Secure API endpoints | 01, 03, 06, 12, 13, 29 on every API route |
 | Check CORS settings | 13 |
-| Add security headers | 14 (+ HSTS from 04) |
 | Turn off debug mode | 20 |
-| Update dependencies | 21 |
 | Remove unused packages | 22 |
 | Check for exposed files | 23 |
-| Secure the database | 03, 10 |
-| Hash passwords properly | 05 |
-| Check git for leaked secrets | 24 (+ 25 for anything found) |
+| Secure the database | 03, 10, 28 |
+| Protect patient / financial / personal data | 03, 28, 29, B6 |
+| Stop fake sign-ups / spam / credential stuffing | 30, 12 |
 | Full security audit | Everything: the normal workflow |
 
 How to run a targeted request:
 1. Do a **light Phase 0**: map only what those checks need (e.g. every API route for 12, every place a password is stored or compared for 05). Skip `SECURITY_MAP.md` unless the scope is wide (API endpoints, database). Still run the matching helper script.
-2. Still check the **red flags**. If you find one outside the scope, tell the person right away and offer to fix it. Don't silently widen the job, and don't stay quiet about a leaked key because they only asked about CORS.
+2. Still check the **red flags**, and always run `scan_secrets.py <app> --history` as part of that check, whatever the request is about. It takes seconds, and a live key sitting in Git history is the single most expensive thing to miss. If you find a red flag outside the scope, tell the person right away and offer to fix it. Don't silently widen the job, and don't stay quiet about a leaked key because they only asked about CORS.
 3. For each check in scope: read its section in the reference file, then audit → fix → test it as in Phases 2 and 4. All the ground rules still apply. Dependency updates (21) count as a change users would notice when a major version is involved.
 4. Write a short `SECURITY_REPORT.md` that has rows only for the checks in scope, plus one line: "Other checks not reviewed. Ask for a full pre-launch audit to cover them." Then give the normal chat summary.
 
+Destructive steps stay gated even in a targeted request: purging Git history needs the person's explicit yes before their own repo is rewritten or anything is force-pushed (without that yes, do the rewrite in a separate mirror clone and hand it over, as the purge runbook describes), and encrypting existing rows on a live database counts as a change users would notice. If they aren't around to answer, prepare everything (commands, migration script, backup step) and list it under "Needs your decision".
+
 If the request names more than about six of these items, or says "everything", "all of it" or "full audit", use the full workflow instead.
 
-### Phase 2: The rest of checks 01–25
+### Phase 2: The rest of checks 01–25 and 28–30
 
 Work through the remaining checks. Each one: audit, fix, note how to verify. Read the reference file for the area before starting its checks. The files hold the detailed audit list, fix, verification, "done when" and stack-specific traps for each check:
 
@@ -103,7 +125,8 @@ Work through the remaining checks. Each one: audit, fix, note how to verify. Rea
 | Identity & access | 01 Authentication · 05 Hash passwords · 09 Admin routes · 15 Session cookies · 17 Reset-link expiry | `references/identity-access.md` |
 | Secrets & keys | 02 Hide API keys · 11 Env variables · 24 Git history · 25 Rotate keys | `references/secrets-keys.md` |
 | Data & inputs | 03 Database · 06 Server-side validation · 07 XSS · 10 Parameterized queries · 18 File uploads · 19 Prices & payments | `references/data-inputs.md` |
-| Network & browser | 04 HTTPS · 12 Rate limiting · 13 CORS · 14 Security headers · 16 CSRF | `references/network-browser.md` |
+| Data protection | 28 Encrypt sensitive data · 29 Trim API responses | `references/data-protection.md` |
+| Network & browser | 04 HTTPS · 12 Rate limiting · 13 CORS · 14 Security headers · 16 CSRF · 30 Bot protection | `references/network-browser.md` |
 | Deployment & supply chain | 20 Debug mode · 21 Vulnerable deps · 22 Unused packages · 23 Exposed files | `references/deployment-supply-chain.md` |
 | Monitoring & response | 08 Logging & monitoring · 26 Full review · 27 Test & report | `references/monitoring-review-testing.md` |
 | Bonus (apply when relevant) | B1 AI features · B2 SSRF · B3 Backups · B4 Your own accounts · B5 Spending caps · B6 Privacy · B7 Email domain · Incident response | `references/bonus-checks.md` |
@@ -122,7 +145,7 @@ A fix nobody has tested is a guess. For every check that applies, write real aut
 
 If the tests can't run (no dependencies installed, no network, no database), still write them, try a lighter verification (a test client, a quick script, static proof with file:line), and mark the evidence honestly as "written, not executed". Never claim a pass you didn't observe.
 
-Then write `SECURITY_REPORT.md` using the template in `references/report-template.md`, and finish with a short summary in chat. The report's "Checks" table always has **one row for every check 01–27** (plus the bonus checks that applied; for a targeted request, only the checks in scope), even if you organised your work by finding. A findings list alone hides what was never looked at; the per-check table is how the person sees coverage, including what passed and what's N/A.
+Then write `SECURITY_REPORT.md` using the template in `references/report-template.md`, and finish with a short summary in chat. The report's "Checks" table always has **one row for every check 01–30** (plus the bonus checks that applied; for a targeted request, only the checks in scope), even if you organised your work by finding. A findings list alone hides what was never looked at; the per-check table is how the person sees coverage, including what passed and what's N/A.
 
 ## Helper scripts
 
@@ -130,15 +153,15 @@ These live in this skill's `scripts/` folder. They use only the Python standard 
 
 | Script | What it does | Used in |
 |---|---|---|
-| `scan_code.py <dir>` | Finds risky code patterns with file:line: dangerous HTML sinks, raw/concatenated SQL, shell exec, eval, weak hashing, debug flags, wildcard CORS, insecure env fallbacks, public-prefixed secret env vars, tokens in localStorage, client-trusted prices. Leads to investigate, not verdicts. | Phase 0, checks 02, 05, 07, 10, 11, 13, 19, 20 |
-| `scan_secrets.py <dir> [--history] [--build <dir>]` | Finds secret-looking strings (masked) in the working tree, optionally in the full Git history (all branches) and a production build folder. Uses gitleaks/trufflehog if installed; otherwise its own patterns. Also lists `.env` files ever committed. | Checks 02, 11, 24, 25 |
+| `scan_code.py <dir>` | Finds risky code patterns with file:line: dangerous HTML sinks, raw/concatenated SQL, shell exec, eval, weak hashing, debug flags, wildcard CORS, insecure env fallbacks, public-prefixed secret env vars, tokens in localStorage, client-trusted prices, request bodies written straight to the DB, privileged DB keys, permissive RLS/rules, sensitive fields and weak encryption, whole objects or `SELECT *` sent to clients, unbounded `limit`, public forms that need bot protection. Leads to investigate, not verdicts. | Phase 0, checks 02, 03, 05, 06, 07, 10, 11, 13, 19, 20, 28, 29, 30 |
+| `scan_secrets.py <dir> [--history] [--build <dir>] [--write-replacements <file>]` | Finds secret-looking strings (masked) in the working tree, optionally in the full Git history (all branches) and a production build folder. Uses gitleaks/trufflehog if installed; otherwise its own patterns. Also lists `.env` files ever committed. `--write-replacements` writes the found values (unprinted) to a file outside the repo for `git filter-repo --replace-text`. | Checks 02, 11, 24, 25 |
 | `check_live.py <https://your-domain> [--api-path /api/x]` | Read-only probe of the person's **own** deployed site: HTTP→HTTPS redirect, HSTS and other security headers, CORS behavior for a foreign Origin, `X-Powered-By`, and ~35 commonly exposed paths (`/.env`, `/.git/config`, dumps, source maps...). | Checks 04, 13, 14, 20, 23 |
 
 Treat script output as a starting point: confirm each hit by reading the code, and look beyond the patterns, because the scripts can't understand logic (IDOR, missing auth checks, webhook flows).
 
 ## Working with large apps
 
-For a big codebase you may split the *audit* across parallel subagents by area (e.g. one per reference file), each returning findings with file:line, no edits. If you use subagents, use the Sonnet model for them (`model: "sonnet"`). Do the fixes and the final review yourself so changes stay consistent.
+For a big codebase you may split the *audit* across parallel subagents by area (e.g. one per reference file), each returning findings with file:line, no edits. If you use subagents, use the most capable model for them. Do the fixes and the final review yourself so changes stay consistent.
 
 ## Final chat summary
 

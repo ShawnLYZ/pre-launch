@@ -9,8 +9,8 @@
     {
       "name": "pre-launch",
       "source": "./",
-      "description": "Runs 27 security checks on a finished app, fixes issues, tests every fix and writes SECURITY_REPORT.md.",
-      "version": "1.0.0",
+      "description": "Runs 30 security checks on a finished app, fixes issues, tests every fix and writes SECURITY_REPORT.md.",
+      "version": "1.1.0",
       "license": "Apache-2.0",
       "category": "security"
     }

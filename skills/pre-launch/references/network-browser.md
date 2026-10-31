@@ -1,6 +1,6 @@
-# Network & Browser: checks 04, 12, 13, 14, 16
+# Network & Browser: checks 04, 12, 13, 14, 16, 30
 
-Contents: [04 HTTPS](#04-enforce-https) · [12 Rate limiting](#12-add-rate-limiting) · [13 CORS](#13-restrict-cors) · [14 Security headers](#14-add-security-headers) · [16 CSRF](#16-add-csrf-protection)
+Contents: [04 HTTPS](#04-enforce-https) · [12 Rate limiting](#12-add-rate-limiting) · [13 CORS](#13-restrict-cors) · [14 Security headers](#14-add-security-headers) · [16 CSRF](#16-add-csrf-protection) · [30 Bot protection](#30-add-bot-protection)
 
 If a live/staging URL exists, `scripts/check_live.py` checks 04, 13 and 14 from the outside in one go.
 
@@ -47,11 +47,12 @@ If a live/staging URL exists, `scripts/check_live.py` checks 04, 13 and 14 from 
 2. A shared store that works on the hosting (Upstash Redis + `@upstash/ratelimit`, Redis, the DB, or platform features like Vercel WAF / Cloudflare rate limiting). For a single long-running server, `express-rate-limit` / `flask-limiter` with memory storage is acceptable for launch but note it in the report. Key by user ID when signed in, IP otherwise.
 3. Get the client IP correctly for the host; don't trust a raw client-spoofable `X-Forwarded-For`.
 4. 429 with `Retry-After` and a friendly message; never reveal whether an account exists.
+4a. **Login specifically** (the most attacked endpoint): limit on two keys at once, per IP *and* per account (email/username), because credential-stuffing bots spread one password list across thousands of IPs. After ~5 failures for an account, add growing delays or require a CAPTCHA (30) rather than a hard lockout: a hard lockout lets anyone lock a victim out by typing their email wrong on purpose. Count failures for unknown emails too, so the limiter doesn't reveal which accounts exist. Apply the same limits to every way in: the login form, the API/token endpoint, OAuth password grants, mobile endpoints, and MFA code entry. If a provider (Supabase, Clerk, Auth0, Firebase) handles login, check and tighten its built-in limits and attack protection in the dashboard, and still limit any custom login or OTP route the app adds itself.
 5. Log rate-limit hits (08).
 6. For paid APIs, give steps to set hard spending limits in each provider dashboard (B5).
 - New limits on a live app can block real users: ask first and pick generous starting values.
 
-**Verify:** a script/test firing requests at each limited endpoint on localhost/staging, showing the switch to 429.
+**Verify:** a script/test firing requests at each limited endpoint on localhost/staging, showing the switch to 429. For login: 6 wrong passwords for one email from rotating fake IPs (if the app trusts a proxy header in tests) are still limited, and the correct password still works after the window passes.
 
 **Watch out:** SMS endpoints are a fraud magnet ("SMS pumping"); cap them hard and restrict destination countries.
 
@@ -115,3 +116,28 @@ If a live/staging URL exists, `scripts/check_live.py` checks 04, 13 and 14 from 
 **Verify:** test that a state-changing request with a foreign Origin and no token is rejected, and the real UI flow still works.
 
 **Watch out:** SameSite alone isn't complete (subdomains you don't control, older browsers). Login CSRF is real too; protect the login form.
+
+---
+
+## 30 Add bot protection
+**MEDIUM** (HIGH if sign-ups grant free credits, AI usage, SMS or email sends). Rate limits (12) slow down one attacker; bots spread across thousands of IPs and stay under them. Without a bot check, scripts create fake accounts by the thousand, abuse free trials and AI credits, pump SMS, spam contact forms and comments, and stuff stolen passwords into login.
+
+**Audit**
+1. List every public form and endpoint a script would target: sign-up, login, password reset / magic link, contact and feedback forms, comments/reviews, newsletter sign-up, waitlists, free-trial or credit grants, "send invite", "send SMS code", checkout/coupon entry, AI endpoints available before payment.
+2. What protects each today: a CAPTCHA or challenge (Cloudflare Turnstile, hCaptcha, reCAPTCHA v3, Friendly Captcha, AWS WAF CAPTCHA), the auth provider's own bot detection (Clerk, Auth0, Supabase Auth CAPTCHA setting, Firebase App Check), a WAF/bot product (Vercel BotID/Firewall, Cloudflare Bot Fight Mode), email verification, a honeypot?
+3. If a CAPTCHA exists: is the token **verified on the server** against the provider's verify API (`siteverify`) with the secret key, for every request? A widget that only runs in the browser blocks nobody. Is the result's `hostname`/`action` checked, and is each token accepted only once?
+
+**Fix** (pick the lightest control that fits; ask before adding visible friction to a live app's flows)
+1. **Invisible or low-friction challenge** on the high-value forms (sign-up, reset, contact, anything that sends email/SMS or grants credits). Cloudflare Turnstile is free, privacy-friendly and works without Cloudflare hosting; hCaptcha and reCAPTCHA v3 are fine alternatives. If the auth provider has a built-in CAPTCHA setting, prefer enabling that over custom code.
+2. **Server-side verification** in one helper (`verifyHuman(token, ip)`): POST the token and secret key to the provider's verify endpoint, reject on failure, timeout or missing token, check `success`, `hostname` (and `action`/`score` for v3). The secret key stays server-only (02); the site key is public.
+3. **Login:** don't challenge everyone. Show the challenge after a few failed attempts for that account or IP (12 step 4a), or when risk is high.
+4. **Cheap extra layers:** a hidden honeypot field (reject if filled), a minimum time-to-submit, email verification before granting credits or sending anything on the user's behalf, block disposable-email domains for free-tier sign-ups if abuse is likely, restrict SMS destination countries (B5).
+5. **API-only clients:** browser challenges don't fit mobile apps or public APIs. Use the platform attestation (Firebase App Check, Apple App Attest, Play Integrity) or API keys plus per-key quotas.
+6. Log challenge failures (08) so a bot wave shows up.
+- Accessibility: choose a challenge with an accessible fallback, and don't put one on every page view.
+
+**Verify:** tests (with the provider's test keys, e.g. Turnstile's always-pass and always-fail secrets, or a mocked verify call) showing that a sign-up with no token, an invalid token or a filled honeypot is rejected, and a valid token succeeds. Confirm the secret key isn't in the client bundle.
+
+**Done when:** every high-value public form verifies a challenge server-side or has a documented alternative · login escalates to a challenge after repeated failures · secret key server-only · failures logged.
+
+**Watch out:** client-only CAPTCHA checks are the most common mistake. reCAPTCHA v3 returns a score, not a pass/fail, so pick a threshold and handle low scores (challenge or deny). Development builds often skip the check; make sure production can't (config by env, default on).

@@ -1,8 +1,8 @@
 {
   "name": "pre-launch",
   "displayName": "Pre-Launch Security",
-  "version": "1.0.0",
-  "description": "Secure a finished app before launch: runs 27 security checks (auth, secrets, database, HTTPS, XSS, SQL injection, CORS, headers, CSRF, payments, dependencies, Git-history secrets and more), fixes the issues, tests every fix and writes SECURITY_REPORT.md.",
+  "version": "1.1.0",
+  "description": "Secure a finished app before launch: runs 30 security checks (auth, secrets, database/RLS, HTTPS, XSS, SQL injection, CORS, headers, CSRF, payments, dependencies, Git-history secrets, field encryption, API response trimming, bot protection and more), fixes the issues, tests every fix and writes SECURITY_REPORT.md.",
   "author": {
     "name": "ShawnLYZ",
     "url": "https://github.com/ShawnLYZ"

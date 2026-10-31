@@ -8,6 +8,10 @@ Usage:
   python scan_secrets.py <project-dir> --history          # + every commit on every branch
   python scan_secrets.py <project-dir> --build dist       # + a production build folder
   python scan_secrets.py <project-dir> --history --json   # machine-readable output
+  python scan_secrets.py <project-dir> --history --write-replacements ../replacements.txt
+      # writes every found value as `literal:VALUE==>REDACTED` for `git filter-repo --replace-text`.
+      # Values go ONLY into that file (which must be outside the repo); nothing is printed.
+      # Review it, use it, then delete it: it contains the secrets.
 
 If gitleaks or trufflehog is installed, --history also tells you the command to run with it,
 because those tools have far larger rule sets. This script is the always-available fallback.
@@ -42,6 +46,8 @@ PATTERNS = [
      r"\s*[:=]\s*['\"]([^'\"\s]{8,})['\"]"),
 ]
 COMPILED = [(n, re.compile(p)) for n, p in PATTERNS]
+# Matches that are markers, not the secret itself (remove those files with --invert-paths instead).
+NOT_A_VALUE = {"Supabase service_role mention", "Private key block"}
 
 # Values that are obviously placeholders, not real secrets.
 PLACEHOLDER = re.compile(
@@ -82,6 +88,8 @@ def scan_text(text, where, findings, commit=None):
                     "line": lineno,
                     "commit": commit,
                     "masked": mask(val) if name != "Supabase service_role mention" else "(keyword)",
+                    # Raw value is kept in memory only for --write-replacements; never printed.
+                    "_raw": val if name not in NOT_A_VALUE else None,
                 })
 
 
@@ -154,8 +162,15 @@ def main():
     ap.add_argument("--history", action="store_true", help="scan every commit on every branch")
     ap.add_argument("--build", action="append", default=[], help="build output folder to scan (repeatable)")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--write-replacements", metavar="FILE",
+                    help="write found values to FILE (outside the repo) in git filter-repo --replace-text format")
     a = ap.parse_args()
     root = os.path.abspath(a.root)
+    if a.write_replacements:
+        out = os.path.abspath(a.write_replacements)
+        if os.path.commonpath([out, root]) == root:
+            sys.exit("Refusing: --write-replacements file must be OUTSIDE the scanned folder, "
+                     "so the secrets list can't be committed by accident.")
 
     tree, hist, build = [], [], []
     for path, text in walk_files(root):
@@ -175,9 +190,25 @@ def main():
             hist_dedup.append(f)
     hist_dedup.reverse()
 
+    replacements_written = None
+    if a.write_replacements:
+        values = []
+        for f in tree + build + hist:
+            v = f.get("_raw")
+            if v and len(v) >= 8 and v not in values:
+                values.append(v)
+        with open(os.path.abspath(a.write_replacements), "w", encoding="utf-8", newline="\n") as fh:
+            for v in values:
+                fh.write(f"literal:{v}==>REDACTED\n")
+        replacements_written = len(values)
+    for f in tree + build + hist:
+        f.pop("_raw", None)
+
     tools = {t: bool(shutil.which(t)) for t in ("gitleaks", "trufflehog")}
     result = {"working_tree": tree, "build_output": build, "git_history": hist_dedup,
               "git_history_info": hist_info, "external_tools_available": tools}
+    if replacements_written is not None:
+        result["replacements_file"] = {"path": os.path.abspath(a.write_replacements), "values": replacements_written}
     if a.json:
         print(json.dumps(result, indent=2))
         return
@@ -206,6 +237,10 @@ def main():
     if any(tools.values()):
         print("\nTip: deeper scan available:",
               "gitleaks git -v" if tools["gitleaks"] else "", "trufflehog git file://. --only-verified" if tools["trufflehog"] else "")
+    if replacements_written is not None:
+        print(f"\nWrote {replacements_written} value(s) to {os.path.abspath(a.write_replacements)} "
+              "(values not shown). Review it, remove false positives, run `git filter-repo --replace-text <file>` "
+              "on a mirror clone, then DELETE the file. Private key files: remove them with --invert-paths.")
     print("\nAnything real found here goes on the rotation list (check 25). Deleting it from code or history does not un-leak it.")
 
 

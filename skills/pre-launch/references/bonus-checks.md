@@ -51,9 +51,11 @@ If, during the pass, you find evidence the app may already be compromised (a key
 ## After launch: re-run checks when adding...
 | Adding | Re-run |
 |---|---|
-| Login or sign-up | 01, 05, 12, 15, 16, 17 |
-| A new table | 03, 06, 10 |
-| A new API route / server action | 01, 03, 06, 09, 12 |
+| Login or sign-up | 01, 05, 12, 15, 16, 17, 30 |
+| A new table | 03, 06, 10, 28 |
+| A new API route / server action | 01, 03, 06, 09, 12, 29 |
+| Sensitive personal data (IDs, health, finance) | 28, 29, B6 |
+| A public form (contact, waitlist, invites) | 06, 12, 30 |
 | Comments, profiles, any user text | 06, 07, 12 |
 | Payments or subscriptions | 06, 12, 19, 08 |
 | File uploads | 18, 03, 12 |
@@ -64,4 +66,4 @@ If, during the pass, you find evidence the app may already be compromised (a key
 | A new package | 21 (check it's real first) |
 | Before every launch | 23, 20, 26, 27 |
 
-Suggest adding a short security section to the project's `CLAUDE.md` / `.cursorrules` so new code is written safely, e.g.: "Every API route must call requireUser() and validate input with Zod. Never use secret keys in client code. Never trust prices from the client. All new tables need RLS policies. Ask before adding packages."
+Suggest adding a short security section to the project's `CLAUDE.md` / `.cursorrules` so new code is written safely, e.g.: "Every API route must call requireUser() and validate input with Zod. Never use secret keys in client code. Never trust prices from the client. All new tables need RLS policies. Return only allowlisted fields. Encrypt sensitive fields with encryptField(). Ask before adding packages."

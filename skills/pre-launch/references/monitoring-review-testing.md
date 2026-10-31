@@ -35,11 +35,11 @@ Don't change code during the review itself; write the report, then fix.
 1. Auth: server checks on every endpoint, sessions, password reset, OAuth/redirects, admin MFA.
 2. Access control: IDOR on every ID-based endpoint, admin routes, multi-tenant/team isolation, role changes.
 3. Secrets: client bundle, env vars, Git history, logs, exposed files.
-4. Data: RLS/rules, least privilege, sensitive fields in responses, backups.
+4. Data: RLS/rules, public vs secret DB keys, field tampering on own rows, least privilege, field-level encryption of sensitive data (28), over-sharing responses (29), backups.
 5. Inputs: validation, mass assignment, SQL/NoSQL/command injection, XSS (incl. AI output), open redirects, SSRF in anything that fetches a URL, email header injection.
 6. Files: upload type/size/content, storage privacy, serving.
 7. Payments: server-side pricing, webhook verification, idempotency, entitlements, coupons, race conditions.
-8. Network: HTTPS/HSTS, CORS, headers, cookies, CSRF, rate limiting (esp. paid/AI endpoints).
+8. Network: HTTPS/HSTS, CORS, headers, cookies, CSRF, rate limiting (esp. login and paid/AI endpoints), bot protection on sign-up and other public forms (30).
 9. Packages & deployment: vulnerable/suspicious deps, debug mode, error leakage, source maps, preview deployments.
 10. Business logic: abuse of free trials, referrals, credits, invites, quotas; state transitions (can steps be skipped or repeated?); race conditions; anything unique to this app.
 11. AI features: prompt injection via user content/documents, tools the model can trigger, cross-user data leaks, cost abuse (see B1).
@@ -85,7 +85,11 @@ Rate severity honestly; say how confident you are in each finding. Then fix new 
 | 19 | Tampered price, negative quantity, reused coupon, success URL without payment, unsigned and duplicate webhooks all fail safely |
 | 20 | Error responses contain no stack traces, paths or queries |
 | 23 | Sensitive paths return 404 |
+| 24 | After a purge: a fresh clone scanned with `scan_secrets.py --history` finds none of the purged values |
 | 25 | Old keys rejected (manual; give the commands) |
+| 28 | Raw DB column holds no plaintext for encrypted fields; owner still reads the right value; tampered ciphertext fails to decrypt; plaintext not in logs |
+| 29 | Each endpoint returns exactly the allowlisted keys per role; no `password`/`hash`/`token`/`secret` or other users' emails in any response; `?limit=100000` capped |
+| 30 | Sign-up/reset/contact without a challenge token, with an invalid token, or with a filled honeypot are rejected; a valid (test-key) token passes |
 
 **Step 2 Fix and re-test:** for each failure explain the cause, apply the smallest correct fix, re-run until it passes. Never weaken or delete a test to pass it; if a test itself was wrong, say why you changed it.
 
